@@ -1,0 +1,338 @@
+import warnings
+import argparse
+import logging
+import pandas as pd
+import numpy as np
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import ElasticNet
+import mlflow.sklearn 
+from pathlib import Path
+from sklearn.preprocessing import LabelEncoder
+from sklearn.feature_selection import RFECV
+from sklearn.linear_model import LogisticRegression, SGDClassifier
+from sklearn.model_selection import StratifiedKFold, train_test_split, cross_validate
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import MinMaxScaler, StandardScaler, Normalizer
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score,f1_score,recall_score,precision_score,confusion_matrix
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.svm import SVC
+from sklearn.metrics import classification_report
+from sklearn.neighbors import KNeighborsClassifier
+
+logging.basicConfig(level=logging.WARN)
+logger = logging.getLogger(__name__)
+
+# evaluation function
+def eval_metrics(actual, pred):
+    rmse = np.sqrt(mean_squared_error(actual, pred))
+    mae = mean_absolute_error(actual, pred)
+    r2 = r2_score(actual, pred)
+    return rmse, mae, r2
+
+if __name__ == "__main__":
+    warnings.filterwarnings("ignore")
+    np.random.seed(40)
+
+    en_sentimiento = pd.read_csv("Reddit-data-final.csv")
+    en_sentimiento.to_csv("Reddit-data-final.csv", index=False)
+
+    dataset = [" ".join(palabra.split()) for palabra in en_sentimiento['English']]
+
+ 
+    tfidf_vectorizer = TfidfVectorizer(use_idf=True)
+    X = tfidf_vectorizer.fit_transform(dataset)#en_sentimiento['English']
+    y = en_sentimiento['Sent_cuanti']
+
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    mlflow.set_tracking_uri(uri="http://127.0.0.1:5001")
+
+    print("the set tracking uri is",mlflow.get_tracking_uri())
+   #### 1. Modelo SVC ########
+    
+    print("Modelo SVC")
+    exp = mlflow.set_experiment(experiment_name="Modelo SVC")
+
+    print("Name: {}".format(exp.name))
+    print("Experiment_id: {}".format(exp.experiment_id))
+
+    mlflow.start_run(run_name="run1.1")
+    tags = {
+        "engineering": "ML platform",
+        "release.candidate":"RC1",
+        "release.version": "2.0"
+    }
+
+    mlflow.set_tags(tags)
+
+    current_run = mlflow.active_run()
+    print("Active run id is {}".format(current_run.info.run_id))
+    print("Active run name is {}".format(current_run.info.run_name))
+
+    svm_model = SVC(kernel='linear')
+    svm_model.fit(X_train, y_train)
+
+    predicted_qualities = svm_model.predict(X_test)
+    (rmse, mae, r2) = eval_metrics(y_test, predicted_qualities)
+
+    ytest_predict_svm_model=svm_model.predict(X_test)
+    ytrain_predict_svm_model=svm_model.predict(X_train)
+    precision_svm_model=precision_score(y_test,ytest_predict_svm_model,average='macro')
+    recall_svm_model=recall_score(y_test,ytest_predict_svm_model,average='macro') 
+    F1_svm_model=f1_score(y_test,ytest_predict_svm_model,average='macro')
+
+    print('Accuracy Test:',accuracy_score(y_test,ytest_predict_svm_model))
+    print('Accuracy Train:',accuracy_score(y_train,ytrain_predict_svm_model))
+    print("Precision Support Vector Classification:", precision_svm_model)
+    print("Recall Support Vector Classification:", recall_svm_model)
+    print("F1_Score Support Vector Classification:", F1_svm_model)
+
+    print("  RMSE: %s" % rmse)
+    print("  MAE: %s" % mae)
+    print("  R2: %s" % r2)
+   
+
+    #log metrics
+    metrics = {
+        "rmse":rmse,
+        "r2":r2,
+        "mae":mae,
+        "Accuracy":precision_svm_model,
+        "recall":recall_svm_model,
+        "F1_Score":F1_svm_model
+    }
+
+    mlflow.log_metrics(metrics)
+
+    #log model
+    mlflow.sklearn.log_model(svm_model, "Modelo SVC")
+    mlflow.log_artifacts("E:/PROGRAMACION II/CHALLENGE/NLP/", artifact_path="Reddit-data-final")
+
+    artifacts_uri=mlflow.get_artifact_uri()
+    print("The artifact path is",artifacts_uri )
+
+    mlflow.end_run()
+
+   #### 2. Naive Bayes########
+    
+    print("Naive Bayes")
+    exp = mlflow.set_experiment(experiment_name="Naive Bayes")
+
+    print("Name: {}".format(exp.name))
+    print("Experiment_id: {}".format(exp.experiment_id))
+
+    mlflow.start_run(run_name="run1.1")
+    tags = {
+        "engineering": "ML platform",
+        "release.candidate":"RC1",
+        "release.version": "2.0"
+    }
+
+    mlflow.set_tags(tags)
+
+    current_run = mlflow.active_run()
+    print("Active run id is {}".format(current_run.info.run_id))
+    print("Active run name is {}".format(current_run.info.run_name))
+
+    model_nv=GaussianNB()
+    model_nv.fit(X_train.toarray(), y_train)
+
+    predicted_qualities = model_nv.predict(X_test.toarray())
+    (rmse, mae, r2) = eval_metrics(y_test, predicted_qualities)
+
+    ytest_predict_nb=model_nv.predict(X_test.toarray())
+    ytrain_predict_nb=model_nv.predict(X_train.toarray())
+    precision_model_nv=precision_score(y_test,ytest_predict_nb,average='macro')
+    recall_model_nv=recall_score(y_test,ytest_predict_nb,average='macro') 
+    F1_model_nvl=f1_score(y_test,ytest_predict_nb,average='macro')
+
+    print('Accuracy Test:',accuracy_score(y_test,ytest_predict_nb))
+    print('Accuracy Train:',accuracy_score(y_train,ytrain_predict_nb))
+    print("Precision NB:", precision_model_nv)
+    print("Recall Support NB:", recall_model_nv)
+    print("F1_Score Support NB:", F1_model_nvl)
+
+    print("  RMSE: %s" % rmse)
+    print("  MAE: %s" % mae)
+    print("  R2: %s" % r2)
+   
+
+    #log metrics
+    metrics = {
+        "rmse":rmse,
+        "r2":r2,
+        "mae":mae,
+        "Accuracy":precision_model_nv,
+        "recall":recall_model_nv,
+        "F1_Score":F1_model_nvl
+    }
+
+    mlflow.log_metrics(metrics)
+
+    #log model
+    mlflow.sklearn.log_model(svm_model, "Model NaiveBayes")
+    mlflow.log_artifacts("E:/PROGRAMACION II/CHALLENGE/NLP/", artifact_path="Reddit-data-final")
+
+    artifacts_uri=mlflow.get_artifact_uri()
+    print("The artifact path is",artifacts_uri )
+
+    mlflow.end_run()
+
+   #### 3. Random Forest ########
+    
+    print("Random Forest")
+    exp = mlflow.set_experiment(experiment_name="Random Forest")
+
+    print("Name: {}".format(exp.name))
+    print("Experiment_id: {}".format(exp.experiment_id))
+
+    mlflow.start_run(run_name="run1.1")
+    tags = {
+        "engineering": "ML platform",
+        "release.candidate":"RC1",
+        "release.version": "2.0"
+    }
+
+    mlflow.set_tags(tags)
+
+    current_run = mlflow.active_run()
+    print("Active run id is {}".format(current_run.info.run_id))
+    print("Active run name is {}".format(current_run.info.run_name))
+
+    rf = RandomForestClassifier(n_estimators=150, random_state=42)
+    rf.fit(X_train,y_train)
+
+    predicted_qualities = rf.predict(X_test)
+    (rmse, mae, r2) = eval_metrics(y_test, predicted_qualities)
+
+    ytest_predict_rf=rf.predict(X_test)
+    ytrain_predict_rf=rf.predict(X_train)
+    precision_rf=precision_score(y_test,ytest_predict_rf,average='macro')
+    recall_rf=recall_score(y_test,ytest_predict_rf,average='macro') #sensibildiad
+    F1_rf=f1_score(y_test,ytest_predict_rf,average='macro')
+
+    print('Accuracy Test:',accuracy_score(y_test,ytest_predict_rf))
+    print('Accuracy Train:',accuracy_score(y_train,ytrain_predict_rf))
+    print("Precision Random Forest:", precision_rf)
+    print("Recall Random Forest:", recall_rf)
+    print("F1_Score Random Forest:", F1_rf)
+
+    print("  RMSE: %s" % rmse)
+    print("  MAE: %s" % mae)
+    print("  R2: %s" % r2)
+
+        # log parameters
+
+    params = {
+        "n_estimators": 150,
+        "random_state": 42,
+
+    }
+    mlflow.log_params(params)
+   
+
+    #log metrics
+    metrics = {
+        "rmse":rmse,
+        "r2":r2,
+        "mae":mae,
+        "Accuracy":precision_rf,
+        "recall":recall_rf,
+        "F1_Score":F1_rf
+    }
+
+    mlflow.log_metrics(metrics)
+
+    #log model
+    mlflow.sklearn.log_model(svm_model, "Random Forest")
+    mlflow.log_artifacts("E:/PROGRAMACION II/CHALLENGE/NLP/", artifact_path="Reddit-data-final")
+
+    artifacts_uri=mlflow.get_artifact_uri()
+    print("The artifact path is",artifacts_uri )
+
+    mlflow.end_run()
+    
+   #### 4. K-Nearest Neighbors (KNN)########
+    
+    print("KNN")
+    exp = mlflow.set_experiment(experiment_name="KNN")
+
+    print("Name: {}".format(exp.name))
+    print("Experiment_id: {}".format(exp.experiment_id))
+
+    mlflow.start_run(run_name="run1.1")
+    tags = {
+        "engineering": "ML platform",
+        "release.candidate":"RC1",
+        "release.version": "2.0"
+    }
+
+    mlflow.set_tags(tags)
+
+    current_run = mlflow.active_run()
+    print("Active run id is {}".format(current_run.info.run_id))
+    print("Active run name is {}".format(current_run.info.run_name))
+
+    knn_k = KNeighborsClassifier(n_neighbors=15, weights='distance')
+    knn_k.fit(X_train,y_train)
+
+    predicted_qualities = knn_k.predict(X_test)
+    (rmse, mae, r2) = eval_metrics(y_test, predicted_qualities)
+
+    ytest_predict_knn_k=rf.predict(X_test)
+    ytrain_predict_knn_k=rf.predict(X_train)
+    precision_knn_k=precision_score(y_test,ytest_predict_knn_k,average='macro')
+    recall_knn_k=recall_score(y_test,ytest_predict_knn_k,average='macro') #sensibildiad
+    F1_knn_k=f1_score(y_test,ytest_predict_knn_k,average='macro')
+
+    print('Accuracy Test:',accuracy_score(y_test,ytest_predict_knn_k))
+    print('Accuracy Train:',accuracy_score(y_train,ytrain_predict_knn_k))
+    print("Precision knn_k:", precision_knn_k)
+    print("Recall knn_k:", recall_knn_k)
+    print("F1_Score knn_k:", F1_knn_k)
+
+    print("  RMSE: %s" % rmse)
+    print("  MAE: %s" % mae)
+    print("  R2: %s" % r2)
+
+        # log parameters
+        
+    params = {
+        "n_neighbors": 15,
+        "weights":'distance',
+
+    }
+    mlflow.log_params(params)
+   
+
+    #log metrics
+    metrics = {
+        "rmse":rmse,
+        "r2":r2,
+        "mae":mae,
+        "Accuracy":precision_knn_k,
+        "recall":recall_knn_k,
+        "F1_Score":F1_knn_k
+    }
+
+    mlflow.log_metrics(metrics)
+
+    #log model
+    mlflow.sklearn.log_model(svm_model, "KNN")
+    mlflow.log_artifacts("E:/PROGRAMACION II/CHALLENGE/NLP/", artifact_path="Reddit-data-final")
+
+    artifacts_uri=mlflow.get_artifact_uri()
+    print("The artifact path is",artifacts_uri )
+
+    mlflow.end_run()
+    
+    
+
+
+
+    
